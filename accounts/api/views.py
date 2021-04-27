@@ -35,7 +35,7 @@ class AccountViewSet(viewsets.ViewSet):
             return Response({
                 "success": False,
                 "message": "Please check input",
-                "errors": serializer.errors,
+                "errors": serializer.errors
             }, status=400)
         # client input is valid, login
         username = serializer.validated_data['username']
@@ -52,7 +52,7 @@ class AccountViewSet(viewsets.ViewSet):
         return Response({
             "success": True,
             "user": UserSerializer(instance=user).data
-        }, status=400)
+        }, status=200)
 
     @action(methods=['POST'], detail=False)
     def logout(self, request):
@@ -67,7 +67,10 @@ class AccountViewSet(viewsets.ViewSet):
         """
         user current login status information
         """
-        data = {'has_logged_in': request.user.is_authenticated}
+        data = {
+            'has_logged_in': request.user.is_authenticated,
+            'ip': request.META['REMOTE_ADDR'],
+        }
         if request.user.is_authenticated:
             data['user'] = UserSerializer(request.user).data
         return Response(data)
@@ -79,12 +82,12 @@ class AccountViewSet(viewsets.ViewSet):
             return Response({
                 "success": False,
                 "message": "Please check input",
-                "errors": serializer.errors,
+                "errors": serializer.errors
             }, status=400)
 
         user = serializer.save()
         django_login(request, user)
         return Response({
             "success": True,
-            "user": UserSerializer(user).data
+            "user": UserSerializer(user).data,
         }, status=201)
