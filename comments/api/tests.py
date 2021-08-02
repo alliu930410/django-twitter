@@ -1,9 +1,11 @@
 from testing.testcases import TestCase
 from rest_framework.test import APIClient
+from comments.models import Comment
+from django.utils import timezone
 
 
 COMMENT_URL = '/api/comments/'
-
+COMMENT_DETAIL_URL = '/api/comments/{}/'
 
 class CommentApiTests(TestCase):
 
@@ -52,3 +54,53 @@ class CommentApiTests(TestCase):
         self.assertEqual(response.data['user']['id'], self.alfredo.id)
         self.assertEqual(response.data['tweet_id'], self.tweet.id)
         self.assertEqual(response.data['content'], '1')
+
+    def test_destroy(self):
+        comment = self.create_comment(self.alfredo, self.tweet)
+        url = COMMENT_DETAIL_URL.format(comment.id)
+        # cannot delete by anonymous user
+        response = self.anonymous_client.delete(url)
+        self.assertEqual(response.status_code, 403)
+
+        # only author can delete
+        response = self.trump_client.delete(url)
+        self.assertEqual(response.status_code, 403)
+
+        # author can delete
+        count = Comment.objects.count()
+        response = self.alfredo_client.delete(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Comment.objects.count(), count - 1)
+
+    def test_update(self):
+        comment = self.create_comment(self.alfredo, self.tweet, 'original')
+        another_tweet = self.create_tweet(self.trump)
+        url = COMMENT_DETAIL_URL.format(comment.id)
+
+        # when we use put
+        # cannot update by anonymous user
+        response = self.anonymous_client.put(url, {'content': 'new'})
+        self.assertEqual(response.status_code, 403)
+        # only author can update
+        response = self.trump_client.put(url, {'content': 'new'})
+        self.assertEqual(response.status_code, 403)
+        comment.refresh_from_db()
+        self.assertNotEqual(comment.content, 'new')
+        # cannot update anything other than contents, but only silent process exceptions
+        before_updated_at = comment.updated_at
+        before_created_at = comment.created_at
+        now = timezone.now()
+        response = self.alfredo_client.put(url, {
+            'content': 'new',
+            'user_id': self.trump.id,
+            'tweet_id': another_tweet.id,
+            'created_at': now,
+        })
+        self.assertEqual(response.status_code, 200)
+        comment.refresh_from_db()
+        self.assertEqual(comment.content, 'new')
+        self.assertEqual(comment.user, self.alfredo)
+        self.assertEqual(comment.tweet, self.tweet)
+        self.assertEqual(comment.created_at, before_created_at)
+        self.assertNotEqual(comment.created_at, now)
+        self.assertNotEqual(comment.updated_at, before_updated_at)
